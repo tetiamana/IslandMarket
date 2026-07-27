@@ -63,6 +63,8 @@
 </head>
 <body class="min-h-screen">
 
+<div id="error-banner" class="hidden" style="background:#B8221F; color:white; padding:10px 20px; text-align:center; font-family:monospace; font-size:13px;"></div>
+
 <!-- NAV -->
 <nav class="border-b" style="border-color:var(--line)">
   <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -237,14 +239,28 @@
 </div>
 
 <script>
-// ==== CONFIGURATION SUPABASE — colle tes identifiants ici ====
+function showError(msg){
+  const b = document.getElementById('error-banner');
+  b.textContent = '⚠️ ' + msg;
+  b.classList.remove('hidden');
+}
+
 const SUPABASE_URL = 'https://vuibgnvldncurghlcvfn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1aWJnbnZsZG5jdXJnaGxjdmZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMzEyNTcsImV4cCI6MjEwMDYwNzI1N30.KpXRZSP9NkfGaToWyXAw__wIINNAINsuCmrJn7DqfEU';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let supabase = null;
+let adminPassword = null;
+try {
+  if(typeof window.supabase === 'undefined'){
+    throw new Error("La librairie Supabase ne s'est pas chargée (problème réseau ou CDN bloqué).");
+  }
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch(e){
+  showError("Connexion à la base de données impossible : " + e.message + " — Recharge la page.");
+}
 
 const XPF_PER_USD = 110;
 
-// ---- Paramètres du calculateur (à ajuster ici) ----
 const COMMISSION = 0.15;
 const EXPRESS_RATE = 3200;
 const ECO_RATE = 1800;
@@ -267,7 +283,6 @@ function computeQuote(priceUSD, weightKg, speed){
 }
 function fmt(n){ return Math.round(n).toLocaleString('fr-FR') + ' XPF'; }
 
-// ---- Navigation ----
 const navClient = document.getElementById('nav-client');
 const navAdmin = document.getElementById('nav-admin');
 const viewClient = document.getElementById('view-client');
@@ -278,21 +293,26 @@ navClient.onclick = () => {
   navClient.style.background = 'var(--teal)'; navClient.style.color = 'white';
   navAdmin.style.background = ''; navAdmin.style.color = '';
 };
-navAdmin.onclick = () => {
+navAdmin.onclick = async () => {
+  if(!supabase){ showError("Connexion à la base de données indisponible."); return; }
+  if(!adminPassword){
+    const pwd = prompt("Mot de passe administrateur :");
+    if(!pwd) return;
+    adminPassword = pwd;
+  }
+  const ok = await renderAdmin();
+  if(!ok){ adminPassword = null; return; }
   viewAdmin.classList.remove('hidden'); viewClient.classList.add('hidden');
   navAdmin.style.background = 'var(--teal)'; navAdmin.style.color = 'white';
   navClient.style.background = ''; navClient.style.color = '';
-  renderAdmin();
 };
 
-// ---- Afficher/masquer le champ lien ----
 document.getElementById('btn-toggle-link').onclick = () => {
   document.getElementById('link-field-wrap').classList.remove('hidden');
   document.getElementById('link-toggle-wrap').classList.add('hidden');
   document.getElementById('input-link').focus();
 };
 
-// ---- Gestion des écrans côté client ----
 function showClientState(state){
   ['quote-empty','quote-pending','quote-ready','quote-paid'].forEach(id => {
     document.getElementById(id).classList.toggle('hidden', id !== state);
@@ -310,8 +330,8 @@ function renderClientQuote(r){
   document.getElementById('l-total-big').textContent = fmt(r.total_xpf);
 }
 
-// ---- Soumission client (écrit dans Supabase) ----
 document.getElementById('btn-submit').onclick = async () => {
+  if(!supabase){ showError("Connexion à la base de données indisponible. Recharge la page et réessaie."); return; }
   const link = document.getElementById('input-link').value.trim();
   const description = document.getElementById('input-desc').value.trim();
   const name = document.getElementById('input-name').value.trim();
@@ -321,78 +341,89 @@ document.getElementById('btn-submit').onclick = async () => {
   const btn = document.getElementById('btn-submit');
   btn.disabled = true; btn.textContent = 'Envoi en cours...';
 
-  const { data, error } = await supabase.from('requests')
-    .insert({ link, description, name, phone, status: 'pending' })
-    .select().single();
+  try {
+    const { data, error } = await supabase.from('requests')
+      .insert({ link, description, name, phone, status: 'pending' })
+      .select().single();
 
-  btn.disabled = false; btn.textContent = 'Demander mon devis';
-  if(error){ alert("Erreur d'envoi, réessaie : " + error.message); return; }
+    btn.disabled = false; btn.textContent = 'Demander mon devis';
+    if(error){ showError("Erreur d'envoi : " + error.message); return; }
 
-  document.getElementById('req-number').textContent = String(data.id).padStart(4,'0');
-  localStorage.setItem('manacart_my_id', data.id);
+    document.getElementById('req-number').textContent = String(data.id).padStart(4,'0');
+    localStorage.setItem('manacart_my_id', data.id);
 
-  const myLink = window.location.origin + window.location.pathname + '?id=' + data.id;
-  document.getElementById('pending-link').textContent = myLink;
-  showClientState('quote-pending');
+    const myLink = window.location.origin + window.location.pathname + '?id=' + data.id;
+    document.getElementById('pending-link').textContent = myLink;
+    showClientState('quote-pending');
+  } catch(e){
+    btn.disabled = false; btn.textContent = 'Demander mon devis';
+    showError("Erreur réseau : " + e.message);
+  }
 };
 
-// ---- Retrouver sa demande via ?id= dans l'URL (ou mémoire locale de l'appareil) ----
 async function checkMyRequest(){
+  if(!supabase) return;
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id') || localStorage.getItem('manacart_my_id');
   if(!id) return;
 
-  const { data, error } = await supabase.from('requests').select('*').eq('id', id).single();
-  if(error || !data) return;
+  try {
+    const { data, error } = await supabase.rpc('get_request_status', { p_id: id });
+    if(error || !data || data.length === 0) return;
+    const r = data[0];
 
-  if(data.status === 'pending'){
-    const myLink = window.location.origin + window.location.pathname + '?id=' + data.id;
-    document.getElementById('pending-link').textContent = myLink;
-    showClientState('quote-pending');
-  } else if(data.status === 'quoted'){
-    renderClientQuote(data);
-    showClientState('quote-ready');
-  } else if(data.status === 'paid'){
-    document.getElementById('paid-number').textContent = String(data.id).padStart(4,'0');
-    showClientState('quote-paid');
-  }
+    if(r.status === 'pending'){
+      const myLink = window.location.origin + window.location.pathname + '?id=' + r.id;
+      document.getElementById('pending-link').textContent = myLink;
+      showClientState('quote-pending');
+    } else if(r.status === 'quoted'){
+      renderClientQuote(r);
+      showClientState('quote-ready');
+    } else if(r.status === 'paid'){
+      document.getElementById('paid-number').textContent = String(r.id).padStart(4,'0');
+      showClientState('quote-paid');
+    }
+  } catch(e){ showError("Erreur réseau : " + e.message); }
 }
 document.getElementById('btn-refresh').onclick = checkMyRequest;
 
-// ---- Rendu admin (lit Supabase) ----
 let adminRequestsCache = [];
 async function renderAdmin(){
   const list = document.getElementById('admin-list');
   const empty = document.getElementById('admin-empty');
-  const { data: requests, error } = await supabase.from('requests').select('*').order('created_at', { ascending: false });
+  try {
+    const { data: requests, error } = await supabase.rpc('admin_list_requests', { p_password: adminPassword });
+    if(error){
+      alert("Mot de passe incorrect.");
+      return false;
+    }
+    adminRequestsCache = requests;
 
-  if(error){ list.innerHTML = '<p class="text-sm">Erreur de chargement : ' + error.message + '</p>'; return; }
-  adminRequestsCache = requests;
+    document.getElementById('admin-count').textContent = requests.length;
+    if(requests.length === 0){ empty.classList.remove('hidden'); list.innerHTML=''; return true; }
+    empty.classList.add('hidden');
 
-  document.getElementById('admin-count').textContent = requests.length;
-  if(requests.length === 0){ empty.classList.remove('hidden'); list.innerHTML=''; return; }
-  empty.classList.add('hidden');
-
-  list.innerHTML = requests.map(r => `
-    <div class="border rounded-lg p-5 flex items-center justify-between gap-4" style="border-color:var(--line)">
-      <div class="min-w-0">
-        <p class="font-mono text-xs mb-1" style="color:var(--stamp)">№${String(r.id).padStart(4,'0')} — ${r.name}${r.phone ? ' · ' + r.phone : ''} · ${new Date(r.created_at).toLocaleDateString('fr-FR')} ${new Date(r.created_at).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}</p>
-        <p class="font-medium truncate">${r.description}</p>
-        <p class="text-xs truncate" style="color:#8a8272">${r.link || 'Pas de lien fourni'}${r.total_xpf ? ' · ' + fmt(r.total_xpf) : ''}</p>
+    list.innerHTML = requests.map(r => `
+      <div class="border rounded-lg p-5 flex items-center justify-between gap-4" style="border-color:var(--line)">
+        <div class="min-w-0">
+          <p class="font-mono text-xs mb-1" style="color:var(--stamp)">№${String(r.id).padStart(4,'0')} — ${r.name}${r.phone ? ' · ' + r.phone : ''} · ${new Date(r.created_at).toLocaleDateString('fr-FR')} ${new Date(r.created_at).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}</p>
+          <p class="font-medium truncate">${r.description}</p>
+          <p class="text-xs truncate" style="color:#8a8272">${r.link || 'Pas de lien fourni'}${r.total_xpf ? ' · ' + fmt(r.total_xpf) : ''}</p>
+        </div>
+        <div class="shrink-0">
+          ${r.status === 'pending'
+            ? `<button onclick="openModal(${r.id})" class="btn-primary text-white text-sm font-medium px-4 py-2 rounded-md">Créer devis</button>`
+            : r.status === 'quoted'
+              ? `<span class="stamp text-xs px-3 py-1 rounded font-semibold">DEVIS ENVOYÉ</span>`
+              : `<span class="stamp text-xs px-3 py-1 rounded font-semibold">PAYÉ</span>`
+          }
+        </div>
       </div>
-      <div class="shrink-0">
-        ${r.status === 'pending'
-          ? `<button onclick="openModal(${r.id})" class="btn-primary text-white text-sm font-medium px-4 py-2 rounded-md">Créer devis</button>`
-          : r.status === 'quoted'
-            ? `<span class="stamp text-xs px-3 py-1 rounded font-semibold">DEVIS ENVOYÉ</span>`
-            : `<span class="stamp text-xs px-3 py-1 rounded font-semibold">PAYÉ</span>`
-        }
-      </div>
-    </div>
-  `).join('');
+    `).join('');
+    return true;
+  } catch(e){ showError("Erreur réseau : " + e.message); return false; }
 }
 
-// ---- Modal devis ----
 let activeId = null;
 function openModal(id){
   activeId = id;
@@ -409,30 +440,33 @@ document.getElementById('m-create').onclick = async () => {
   if(!price || !weight){ alert('Renseigne le prix et le poids.'); return; }
 
   const q = computeQuote(price, weight, speed);
-  const { error } = await supabase.from('requests').update({
-    status: 'quoted',
-    price_usd: price, weight_kg: weight, speed,
-    price_xpf: q.priceXPF, ship_xpf: q.shipXPF, tax_xpf: q.taxXPF,
-    tax_label: q.taxLabel, fee_xpf: q.feeXPF, total_xpf: q.totalXPF
-  }).eq('id', activeId);
+  try {
+    const { error } = await supabase.rpc('admin_create_quote', {
+      p_password: adminPassword, p_id: activeId,
+      p_price_usd: price, p_weight_kg: weight, p_speed: speed,
+      p_price_xpf: q.priceXPF, p_ship_xpf: q.shipXPF, p_tax_xpf: q.taxXPF,
+      p_tax_label: q.taxLabel, p_fee_xpf: q.feeXPF, p_total_xpf: q.totalXPF
+    });
 
-  document.getElementById('modal').classList.add('hidden');
-  if(error){ alert('Erreur : ' + error.message); return; }
-  renderAdmin();
+    document.getElementById('modal').classList.add('hidden');
+    if(error){ showError('Erreur : ' + error.message); return; }
+    renderAdmin();
+  } catch(e){ showError("Erreur réseau : " + e.message); }
 };
 
-// ---- Paiement (le client clique sur sa propre page) ----
 document.getElementById('btn-pay').onclick = async () => {
+  if(!supabase){ showError("Connexion indisponible. Recharge la page."); return; }
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id') || localStorage.getItem('manacart_my_id');
   if(!id) return;
-  const { error } = await supabase.from('requests').update({ status: 'paid' }).eq('id', id);
-  if(error){ alert('Erreur : ' + error.message); return; }
-  document.getElementById('paid-number').textContent = String(id).padStart(4,'0');
-  showClientState('quote-paid');
+  try {
+    const { error } = await supabase.rpc('mark_paid', { p_id: id });
+    if(error){ showError('Erreur : ' + error.message); return; }
+    document.getElementById('paid-number').textContent = String(id).padStart(4,'0');
+    showClientState('quote-paid');
+  } catch(e){ showError("Erreur réseau : " + e.message); }
 };
 
-// ---- Au chargement : voir si on revient consulter une demande existante ----
 checkMyRequest();
 </script>
 </body>
