@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NatiMarket — De Walmart à votre porte</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAF6EE;
+    --ink:#1B2B2E;
+    --teal:#0E4F56;
+    --teal-dark:#08363B;
+    --coral:#E8623D;
+    --stamp:#B8891F;
+    --line:#D9D0BE;
+  }
+  body{ background:var(--paper); color:var(--ink); font-family:'Work Sans',sans-serif; }
+  .font-display{ font-family:'Fraunces',serif; }
+  .font-mono{ font-family:'IBM Plex Mono',monospace; }
+  .tag-card{
+    background:#fff;
+    border:1.5px solid var(--line);
+    position:relative;
+  }
+  .tag-card::before, .tag-card::after{
+    content:"";
+    position:absolute;
+    width:22px; height:22px;
+    background:var(--paper);
+    border:1.5px solid var(--line);
+    border-radius:50%;
+    top:50%;
+    transform:translateY(-50%);
+  }
+  .tag-card::before{ left:-12px; }
+  .tag-card::after{ right:-12px; }
+  .perf{
+    background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 6px, transparent 6px, transparent 14px);
+    width:1.5px;
+  }
+  .stamp{
+    border:2px solid var(--stamp);
+    color:var(--stamp);
+    transform:rotate(-6deg);
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .route-dot{ background:var(--coral); }
+  .route-line{
+    background-image: linear-gradient(to right, var(--teal) 50%, transparent 50%);
+    background-size: 10px 2px;
+    height:2px;
+  }
+  ::selection{ background:var(--coral); color:white; }
+  .btn-primary{ background:var(--coral); }
+  .btn-primary:hover{ background:#d3552f; }
+  .btn-ghost:hover{ background:rgba(14,79,86,0.06); }
+  input:focus, select:focus{ outline:none; box-shadow:0 0 0 3px rgba(14,79,86,0.15); border-color:var(--teal); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="error-banner" class="hidden" style="background:#B8221F; color:white; padding:10px 20px; text-align:center; font-family:monospace; font-size:13px;"></div>
+
+<!-- NAV -->
+<nav class="border-b" style="border-color:var(--line)">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="font-display text-xl font-semibold" style="color:var(--teal)">NatiMarket</span>
+      <span class="font-mono text-[10px] px-1.5 py-0.5 rounded" style="background:var(--teal); color:var(--paper)">BÊTA</span>
+    </div>
+    <div class="flex items-center gap-1 font-mono text-xs">
+      <button id="nav-client" class="px-3 py-1.5 rounded-full transition" style="background:var(--teal); color:white">Client</button>
+      <button id="nav-admin" class="px-3 py-1.5 rounded-full transition btn-ghost">Admin</button>
+    </div>
+  </div>
+</nav>
+
+<!-- CLIENT VIEW -->
+<main id="view-client">
+  <!-- HERO -->
+  <section class="max-w-5xl mx-auto px-6 pt-16 pb-10">
+    <div class="flex items-center gap-3 mb-6 font-mono text-xs" style="color:var(--stamp)">
+      <span class="route-dot w-2 h-2 rounded-full inline-block"></span>
+      <span>WALMART, USA</span>
+      <span class="route-line flex-1 max-w-[60px] inline-block"></span>
+      <span>→</span>
+      <span class="route-line flex-1 max-w-[60px] inline-block"></span>
+      <span class="route-dot w-2 h-2 rounded-full inline-block"></span>
+      <span>PAPEETE, PF</span>
+    </div>
+    <h1 class="font-display text-4xl md:text-6xl font-semibold leading-[1.05] max-w-3xl" style="color:var(--teal-dark)">
+      Collez un lien Walmart.<br>Recevez un prix livré.
+    </h1>
+    <p class="mt-5 text-lg max-w-xl" style="color:#4a5a5c">
+      Transport, douane et notre commission, tout est calculé avant que vous ne payiez un franc. Pas de mauvaise surprise à l'arrivée.
+    </p>
+  </section>
+
+  <!-- FORM -->
+  <section class="max-w-5xl mx-auto px-6 pb-24">
+    <div class="grid md:grid-cols-5 gap-8">
+      <!-- LEFT: input -->
+      <div class="md:col-span-2">
+        <div class="tag-card rounded-lg p-6">
+          <p class="font-mono text-xs mb-4" style="color:var(--stamp)">DEMANDE DE DEVIS №<span id="req-number">0142</span></p>
+
+          <label class="block text-sm font-medium mb-1.5">Décrivez le produit en une phrase</label>
+          <input id="input-desc" type="text" placeholder="Ex : perceuse sans fil DeWalt 20V"
+            class="w-full border rounded-md px-3 py-2.5 text-sm mb-4" style="border-color:var(--line)">
+
+          <div id="link-toggle-wrap" class="mb-4">
+            <button type="button" id="btn-toggle-link" class="text-sm font-medium flex items-center gap-1.5" style="color:var(--teal)">
+              <span>+ Ajouter le lien Walmart</span>
+            </button>
+          </div>
+
+          <div id="link-field-wrap" class="hidden mb-4">
+            <label class="block text-sm font-medium mb-1.5">Lien du produit Walmart</label>
+            <input id="input-link" type="text" placeholder="https://www.walmart.com/ip/..."
+              class="w-full border rounded-md px-3 py-2.5 text-sm" style="border-color:var(--line)">
+          </div>
+
+          <label class="block text-sm font-medium mb-1.5">Votre nom</label>
+          <input id="input-name" type="text" placeholder="Ex : Teiva M."
+            class="w-full border rounded-md px-3 py-2.5 text-sm mb-4" style="border-color:var(--line)">
+
+          <label class="block text-sm font-medium mb-1.5">WhatsApp</label>
+          <input id="input-phone" type="text" placeholder="+689 87 XX XX XX"
+            class="w-full border rounded-md px-3 py-2.5 text-sm mb-5" style="border-color:var(--line)">
+
+          <button id="btn-submit" class="btn-primary w-full text-white font-medium py-3 rounded-md transition">
+            Demander mon devis
+          </button>
+          <p class="font-mono text-[11px] mt-3" style="color:#8a8272">Réponse sous 24h — un humain vérifie chaque demande.</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: status / quote -->
+      <div class="md:col-span-3">
+        <div id="quote-empty" class="h-full flex items-center justify-center border rounded-lg p-10 text-center" style="border-color:var(--line); min-height:340px">
+          <div>
+            <p class="font-display text-2xl mb-2" style="color:var(--teal-dark)">Votre devis apparaîtra ici</p>
+            <p class="text-sm" style="color:#8a8272">Envoyez votre demande à gauche. Dès qu'un devis est prêt côté admin, il s'affiche automatiquement.</p>
+          </div>
+        </div>
+
+        <div id="quote-pending" class="hidden h-full flex items-center justify-center border rounded-lg p-10 text-center" style="border-color:var(--line); min-height:340px">
+          <div>
+            <p class="font-mono text-xs mb-2" style="color:var(--stamp)">EN COURS DE TRAITEMENT</p>
+            <p class="font-display text-2xl mb-2" style="color:var(--teal-dark)">Demande reçue — devis en préparation</p>
+            <p class="text-sm mb-4" style="color:#8a8272">Garde ce lien pour retrouver ton devis dès qu'il est prêt :</p>
+            <p id="pending-link" class="font-mono text-xs break-all mb-4" style="color:var(--teal)"></p>
+            <button id="btn-refresh" type="button" class="text-sm font-medium underline" style="color:var(--teal)">🔄 Vérifier si mon devis est prêt</button>
+          </div>
+        </div>
+
+        <div id="quote-ready" class="hidden tag-card rounded-lg p-8">
+          <div class="flex items-start justify-between mb-5">
+            <p class="font-mono text-xs" style="color:var(--stamp)">DEVIS №<span id="ready-number"></span></p>
+            <div class="stamp px-3 py-1 rounded text-xs font-semibold whitespace-nowrap">PRÊT</div>
+          </div>
+
+          <p class="font-display text-sm mb-1" id="ready-desc" style="color:#8a8272"></p>
+          <p class="font-mono text-xs uppercase tracking-wide mb-1" style="color:var(--stamp)">Prix livré chez vous</p>
+          <p class="font-display text-5xl font-semibold mb-6" id="l-total-big" style="color:var(--teal-dark)">—</p>
+
+          <div class="font-mono text-sm space-y-2 mb-6 border-t pt-4" style="color:#4a5a5c; border-color:var(--line)">
+            <div class="flex justify-between"><span>Prix produit (Walmart)</span><span id="l-price">—</span></div>
+            <div class="flex justify-between"><span>Transport estimé</span><span id="l-ship">—</span></div>
+            <div class="flex justify-between"><span>Taxe douane PF (<span id="l-taxrate">—</span>)</span><span id="l-tax">—</span></div>
+            <div class="flex justify-between"><span>Commission NatiMarket</span><span id="l-fee">—</span></div>
+          </div>
+
+          <button id="btn-pay" class="btn-primary w-full text-white font-medium py-3 rounded-md transition">
+            Commander — payer maintenant
+          </button>
+        </div>
+
+        <div id="quote-paid" class="hidden tag-card rounded-lg p-10 text-center" style="min-height:340px; display:flex; align-items:center; justify-content:center;">
+          <div>
+            <p class="stamp inline-block px-4 py-1.5 rounded text-sm font-semibold mb-4">✓ PAIEMENT REÇU</p>
+            <p class="font-display text-2xl mb-1" style="color:var(--teal-dark)">Commande n°<span id="paid-number"></span></p>
+            <p class="font-mono text-xs mb-5" style="color:var(--stamp)">PROCHAINE ÉTAPE</p>
+            <p class="text-sm max-w-xs mx-auto mb-1" style="color:#4a5a5c">Nous achetons votre produit chez Walmart.</p>
+            <p class="text-sm max-w-xs mx-auto" style="color:#8a8272">Vous recevrez un message WhatsApp sous quelques heures, puis à chaque étape jusqu'à la livraison.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ADMIN VIEW -->
+<main id="view-admin" class="hidden">
+  <section class="max-w-5xl mx-auto px-6 py-12">
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <p class="font-mono text-xs mb-1" style="color:var(--stamp)">TABLEAU DE BORD</p>
+        <h2 class="font-display text-3xl font-semibold" style="color:var(--teal-dark)">Demandes en attente</h2>
+      </div>
+      <div class="font-mono text-xs px-3 py-1.5 rounded-full" style="background:var(--teal); color:white"><span id="admin-count">0</span> demande(s)</div>
+    </div>
+
+    <div id="admin-empty" class="border rounded-lg p-12 text-center" style="border-color:var(--line)">
+      <p style="color:#8a8272">Aucune demande pour l'instant. Va dans l'onglet Client pour en soumettre une (mode démo).</p>
+    </div>
+
+    <div id="admin-list" class="space-y-4"></div>
+  </section>
+</main>
+
+<!-- MODAL: create quote -->
+<div id="modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-6 z-50">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full tag-card">
+    <p class="font-mono text-xs mb-1" style="color:var(--stamp)">CRÉER LE DEVIS</p>
+    <p class="font-display text-xl mb-5" id="modal-desc" style="color:var(--teal-dark)"></p>
+
+    <label class="block text-sm font-medium mb-1.5">Prix produit sur Walmart (USD)</label>
+    <input id="m-price" type="number" placeholder="Ex : 89.99" class="w-full border rounded-md px-3 py-2 text-sm mb-4" style="border-color:var(--line)">
+
+    <label class="block text-sm font-medium mb-1.5">Poids estimé (kg)</label>
+    <input id="m-weight" type="number" placeholder="Ex : 2.5" class="w-full border rounded-md px-3 py-2 text-sm mb-4" style="border-color:var(--line)">
+
+    <label class="block text-sm font-medium mb-1.5">Vitesse</label>
+    <select id="m-speed" class="w-full border rounded-md px-3 py-2 text-sm mb-5" style="border-color:var(--line)">
+      <option value="express">Express (5-7 jours)</option>
+      <option value="eco">Économique (10-14 jours)</option>
+    </select>
+
+    <div class="flex gap-3">
+      <button id="m-cancel" class="flex-1 border font-medium py-2.5 rounded-md" style="border-color:var(--line)">Annuler</button>
+      <button id="m-create" class="flex-1 btn-primary text-white font-medium py-2.5 rounded-md">Calculer le devis</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showError(msg){
+  const b = document.getElementById('error-banner');
+  b.textContent = '⚠️ ' + msg;
+  b.classList.remove('hidden');
+}
+
+// ==== CONFIGURATION SUPABASE ====
+const SUPABASE_URL = 'https://vuibgnvldncurghlcvfn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1aWJnbnZsZG5jdXJnaGxjdmZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMzEyNTcsImV4cCI6MjEwMDYwNzI1N30.KpXRZSP9NkfGaToWyXAw__wIINNAINsuCmrJn7DqfEU';
+
+let sb = null;
+let adminPassword = null;
+try {
+  if(typeof window.supabase === 'undefined'){
+    throw new Error("La librairie Supabase ne s'est pas chargée (problème réseau ou CDN bloqué).");
+  }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch(e){
+  showError("Connexion à la base de données impossible : " + e.message + " — Recharge la page.");
+}
+
+const XPF_PER_USD = 110;
+
+// ---- Paramètres du calculateur (à ajuster ici) ----
+const COMMISSION = 0.15;
+const EXPRESS_RATE = 3200;
+const ECO_RATE = 1800;
+const EXPRESS_BASE = 2500;
+const ECO_BASE = 1200;
+
+function computeQuote(priceUSD, weightKg, speed){
+  const priceXPF = priceUSD * XPF_PER_USD;
+  const shipRatePerKg = speed === 'express' ? EXPRESS_RATE : ECO_RATE;
+  const baseShip = speed === 'express' ? EXPRESS_BASE : ECO_BASE;
+  const shipXPF = Math.round(baseShip + weightKg * shipRatePerKg);
+  const dutyBase = priceXPF + shipXPF;
+  let taxRate = 0, taxLabel = "0% (franchise)";
+  if(dutyBase > 50000){ taxRate = 0.30; taxLabel = "déclaration classique — à valider"; }
+  else if(dutyBase > 20000){ taxRate = 0.30; taxLabel = "30% (forfaitaire)"; }
+  const taxXPF = Math.round(dutyBase * taxRate);
+  const feeXPF = Math.round((priceXPF + shipXPF) * COMMISSION);
+  const totalXPF = Math.round(priceXPF + shipXPF + taxXPF + feeXPF);
+  return { priceXPF, shipXPF, taxXPF, taxLabel, feeXPF, totalXPF };
+}
+function fmt(n){ return Math.round(n).toLocaleString('fr-FR') + ' XPF'; }
+
+// ---- Navigation (toujours active, indépendante de Supabase) ----
+const navClient = document.getElementById('nav-client');
+const navAdmin = document.getElementById('nav-admin');
+const viewClient = document.getElementById('view-client');
+const viewAdmin = document.getElementById('view-admin');
+
+navClient.onclick = () => {
+  viewClient.classList.remove('hidden'); viewAdmin.classList.add('hidden');
+  navClient.style.background = 'var(--teal)'; navClient.style.color = 'white';
+  navAdmin.style.background = ''; navAdmin.style.color = '';
+};
+navAdmin.onclick = async () => {
+  if(!sb){ showError("Connexion à la base de données indisponible."); return; }
+  if(!adminPassword){
+    const pwd = prompt("Mot de passe administrateur :");
+    if(!pwd) return;
+    adminPassword = pwd;
+  }
+  const ok = await renderAdmin();
+  if(!ok){ adminPassword = null; return; }
+  viewAdmin.classList.remove('hidden'); viewClient.classList.add('hidden');
+  navAdmin.style.background = 'var(--teal)'; navAdmin.style.color = 'white';
+  navClient.style.background = ''; navClient.style.color = '';
+};
+
+// ---- Afficher/masquer le champ lien ----
+document.getElementById('btn-toggle-link').onclick = () => {
+  document.getElementById('link-field-wrap').classList.remove('hidden');
+  document.getElementById('link-toggle-wrap').classList.add('hidden');
+  document.getElementById('input-link').focus();
+};
+
+// ---- Gestion des écrans côté client ----
+function showClientState(state){
+  ['quote-empty','quote-pending','quote-ready','quote-paid'].forEach(id => {
+    document.getElementById(id).classList.toggle('hidden', id !== state);
+  });
+}
+
+function renderClientQuote(r){
+  document.getElementById('ready-number').textContent = String(r.id).padStart(4,'0');
+  document.getElementById('ready-desc').textContent = r.description;
+  document.getElementById('l-price').textContent = fmt(r.price_xpf);
+  document.getElementById('l-ship').textContent = fmt(r.ship_xpf);
+  document.getElementById('l-taxrate').textContent = r.tax_label;
+  document.getElementById('l-tax').textContent = fmt(r.tax_xpf);
+  document.getElementById('l-fee').textContent = fmt(r.fee_xpf);
+  document.getElementById('l-total-big').textContent = fmt(r.total_xpf);
+}
+
+// ---- Soumission client (écrit dans Supabase) ----
+document.getElementById('btn-submit').onclick = async () => {
+  if(!sb){ showError("Connexion à la base de données indisponible. Recharge la page et réessaie."); return; }
+  const link = document.getElementById('input-link').value.trim();
+  const description = document.getElementById('input-desc').value.trim();
+  const name = document.getElementById('input-name').value.trim();
+  const phone = document.getElementById('input-phone').value.trim();
+  if(!description || !name){ alert('Merci de remplir au moins la description du produit et votre nom.'); return; }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true; btn.textContent = 'Envoi en cours...';
+
+  try {
+    const { data, error } = await sb.from('requests')
+      .insert({ link, description, name, phone, status: 'pending' })
+      .select().single();
+
+    btn.disabled = false; btn.textContent = 'Demander mon devis';
+    if(error){ showError("Erreur d'envoi : " + error.message); return; }
+
+    document.getElementById('req-number').textContent = String(data.id).padStart(4,'0');
+    localStorage.setItem('manacart_my_id', data.id);
+
+    const myLink = window.location.origin + window.location.pathname + '?id=' + data.id;
+    document.getElementById('pending-link').textContent = myLink;
+    showClientState('quote-pending');
+  } catch(e){
+    btn.disabled = false; btn.textContent = 'Demander mon devis';
+    showError("Erreur réseau : " + e.message);
+  }
+};
+
+// ---- Retrouver sa demande via ?id= dans l'URL (ou mémoire locale de l'appareil) ----
+async function checkMyRequest(){
+  if(!sb) return;
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id') || localStorage.getItem('manacart_my_id');
+  if(!id) return;
+
+  try {
+    const { data, error } = await sb.rpc('get_request_status', { p_id: id });
+    if(error || !data || data.length === 0) return;
+    const r = data[0];
+
+    if(r.status === 'pending'){
+      const myLink = window.location.origin + window.location.pathname + '?id=' + r.id;
+      document.getElementById('pending-link').textContent = myLink;
+      showClientState('quote-pending');
+    } else if(r.status === 'quoted'){
+      renderClientQuote(r);
+      showClientState('quote-ready');
+    } else if(r.status === 'paid'){
+      document.getElementById('paid-number').textContent = String(r.id).padStart(4,'0');
+      showClientState('quote-paid');
+    }
+  } catch(e){ showError("Erreur réseau : " + e.message); }
+}
+document.getElementById('btn-refresh').onclick = checkMyRequest;
+
+// ---- Rendu admin (lit Supabase) ----
+let adminRequestsCache = [];
+async function renderAdmin(){
+  const list = document.getElementById('admin-list');
+  const empty = document.getElementById('admin-empty');
+  try {
+    const { data: requests, error } = await sb.rpc('admin_list_requests', { p_password: adminPassword });
+    if(error){
+      alert("Mot de passe incorrect.");
+      return false;
+    }
+    adminRequestsCache = requests;
+
+    document.getElementById('admin-count').textContent = requests.length;
+    if(requests.length === 0){ empty.classList.remove('hidden'); list.innerHTML=''; return true; }
+    empty.classList.add('hidden');
+
+    list.innerHTML = requests.map(r => `
+      <div class="border rounded-lg p-5 flex items-center justify-between gap-4" style="border-color:var(--line)">
+        <div class="min-w-0">
+          <p class="font-mono text-xs mb-1" style="color:var(--stamp)">№${String(r.id).padStart(4,'0')} — ${r.name}${r.phone ? ' · ' + r.phone : ''} · ${new Date(r.created_at).toLocaleDateString('fr-FR')} ${new Date(r.created_at).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}</p>
+          <p class="font-medium truncate">${r.description}</p>
+          <p class="text-xs truncate" style="color:#8a8272">${r.link || 'Pas de lien fourni'}${r.total_xpf ? ' · ' + fmt(r.total_xpf) : ''}</p>
+        </div>
+        <div class="shrink-0">
+          ${r.status === 'pending'
+            ? `<button onclick="openModal(${r.id})" class="btn-primary text-white text-sm font-medium px-4 py-2 rounded-md">Créer devis</button>`
+            : r.status === 'quoted'
+              ? `<span class="stamp text-xs px-3 py-1 rounded font-semibold">DEVIS ENVOYÉ</span>`
+              : `<span class="stamp text-xs px-3 py-1 rounded font-semibold">PAYÉ</span>`
+          }
+        </div>
+      </div>
+    `).join('');
+    return true;
+  } catch(e){ showError("Erreur réseau : " + e.message); return false; }
+}
+
+// ---- Modal devis ----
+let activeId = null;
+function openModal(id){
+  activeId = id;
+  const r = adminRequestsCache.find(x => x.id === id);
+  document.getElementById('modal-desc').textContent = r ? r.description : '';
+  document.getElementById('modal').classList.remove('hidden');
+}
+document.getElementById('m-cancel').onclick = () => document.getElementById('modal').classList.add('hidden');
+
+document.getElementById('m-create').onclick = async () => {
+  const price = parseFloat(document.getElementById('m-price').value);
+  const weight = parseFloat(document.getElementById('m-weight').value);
+  const speed = document.getElementById('m-speed').value;
+  if(!price || !weight){ alert('Renseigne le prix et le poids.'); return; }
+
+  const q = computeQuote(price, weight, speed);
+  try {
+    const { error } = await sb.rpc('admin_create_quote', {
+      p_password: adminPassword, p_id: activeId,
+      p_price_usd: price, p_weight_kg: weight, p_speed: speed,
+      p_price_xpf: q.priceXPF, p_ship_xpf: q.shipXPF, p_tax_xpf: q.taxXPF,
+      p_tax_label: q.taxLabel, p_fee_xpf: q.feeXPF, p_total_xpf: q.totalXPF
+    });
+
+    document.getElementById('modal').classList.add('hidden');
+    if(error){ showError('Erreur : ' + error.message); return; }
+    renderAdmin();
+  } catch(e){ showError("Erreur réseau : " + e.message); }
+};
+
+// ---- Paiement (le client clique sur sa propre page) ----
+document.getElementById('btn-pay').onclick = async () => {
+  if(!sb){ showError("Connexion indisponible. Recharge la page."); return; }
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id') || localStorage.getItem('manacart_my_id');
+  if(!id) return;
+  try {
+    const { error } = await sb.rpc('mark_paid', { p_id: id });
+    if(error){ showError('Erreur : ' + error.message); return; }
+    document.getElementById('paid-number').textContent = String(id).padStart(4,'0');
+    showClientState('quote-paid');
+  } catch(e){ showError("Erreur réseau : " + e.message); }
+};
+
+// ---- Au chargement : voir si on revient consulter une demande existante ----
+checkMyRequest();
+</script>
+</body>
+</html>
